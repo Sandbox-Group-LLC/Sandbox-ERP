@@ -1,0 +1,143 @@
+You are working on a web app with a **Projects** section, tabbed navigation, and role-based access control (Admins, Members).
+
+**Goal:** Extend the existing **Contractor Expense Reports** feature with a simple approval workflow, including an admin “Return to Employee” action, comments, and a workflow recap per report.
+
+---
+
+## Workflow Model
+
+Each expense report follows this lifecycle:
+
+* **Draft** (editing, not yet submitted)
+* **Submitted** (awaiting admin review)
+* **Returned** (sent back to employee with comment)
+* **Approved** (final state for now)
+
+---
+
+## Functional Requirements
+
+### 1. Workflow State
+
+* Add a `status` field to the expense model with allowed values:
+
+  * `draft`
+  * `submitted`
+  * `returned`
+  * `approved`
+* Default state:
+
+  * New reports start as `draft`
+  * Submitting the form sets status to `submitted`
+
+---
+
+### 2. Admin Actions
+
+Admins can perform the following actions on **submitted** expense reports:
+
+#### a. Return to Employee
+
+* Add a **“Return to Employee”** button on submitted reports.
+* When clicked:
+
+  * Admin must enter a **required comment** explaining what needs to be fixed.
+  * Status changes from `submitted` → `returned`.
+  * Comment is saved and associated with this workflow action.
+
+#### b. Approve
+
+* Add an **“Approve”** button for submitted reports.
+* Status changes from `submitted` → `approved`.
+
+---
+
+### 3. Employee Edit & Resubmit Flow
+
+* Employees can view reports with status `returned`.
+* Returned reports become **editable again** for the submitting user.
+* After making edits:
+
+  * Employee can click **Resubmit**
+  * Status changes from `returned` → `submitted`
+* Previous admin comments remain visible for context.
+
+---
+
+### 4. Permissions & Visibility
+
+* **Admins**
+
+  * Can see all expense reports.
+  * Can see full workflow history and comments.
+* **Members**
+
+  * Can submit expenses.
+  * Can only see **their own** expense reports.
+  * Can only edit reports in `draft` or `returned` state.
+  * Cannot see other users’ reports or comments.
+
+All permission checks must be enforced server-side.
+
+---
+
+### 5. Workflow / Approval Recap (Per Report)
+
+Add a lightweight **Workflow History** or **Activity** section on each expense report detail view:
+
+* Display a chronological list showing:
+
+  * Submitted by user (timestamp)
+  * Returned by admin (comment + timestamp)
+  * Resubmitted by user (timestamp)
+  * Approved by admin (timestamp)
+* This can be powered by:
+
+  * A separate `ExpenseActivity` / `ExpenseEvent` table, or
+  * An append-only JSON array if simpler (but must be immutable once written).
+
+This section is read-only and meant for clarity and auditability.
+
+---
+
+### 6. Data Model Updates
+
+Extend or add supporting models as needed:
+
+**Expense**
+
+* id
+* projectId
+* userId
+* date
+* amount
+* category
+* description
+* receiptUrl (nullable)
+* status
+* createdAt
+* updatedAt
+
+**ExpenseActivity (or similar)**
+
+* id
+* expenseId
+* actorUserId
+* action (`submitted`, `returned`, `resubmitted`, `approved`)
+* comment (nullable)
+* createdAt
+
+---
+
+### 7. UI Expectations
+
+* Keep UI minimal and consistent with existing Project tabs.
+* Use clear status labels and inline admin actions.
+* No notifications or accounting integrations yet.
+* Focus on:
+
+  * Clear state transitions
+  * Correct permissions
+  * Transparent workflow history
+
+Implement end-to-end: database/schema updates, API routes, access control, and UI updates.

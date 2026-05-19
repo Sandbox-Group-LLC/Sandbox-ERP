@@ -1,0 +1,75 @@
+You are building an MVP “Sandbox-ERP” web app. Goal: an agency can run any event project (conference, brand activation, gala, roadshow, etc.) from lead → project → estimate → plan → purchasing → staffing → actuals → closeout exports. Do NOT build full accounting.
+
+TECH STACK (Replit-friendly):
+
+Next.js (App Router) + TypeScript
+Postgres
+Prisma ORM
+Auth (NextAuth preferred; if too heavy, simple email+password with bcrypt)
+UI: minimal, clean. Use a component library only if it speeds up (shadcn/ui ok).
+CSV exports via server route.
+MVP FEATURES (MUST HAVE):
+
+Org + Users
+Single organization support is okay for MVP.
+Users can log in and see only their org’s data.
+CRM-lite
+Clients: name, notes
+Contacts: name, email, phone, role, linked to client
+Opportunities: client, stage (Lead/Qualified/Proposal/Won/Lost), budget_range, event_type (string), target_start_date, notes
+Convert Opportunity → Project (creates a Project linked to client + opportunity)
+Project Hub
+Project fields: clientId, name, eventType, city, venue, startDate, endDate, status (Draft/Active/Onsite/Closed), ownerUserId
+Tabs/pages: Overview, Estimate, Plan, Vendors, Staffing, Actuals, Exports
+Estimating (with versions)
+EstimateVersion: projectId, versionNumber, status (Draft/Approved), createdAt
+EstimateLineItem: category, description, qty, unitCost, pricingMode (PassThrough/Markup/Fixed), markupPercent (nullable), revenue (stored or computed), vendorId (nullable)
+Must support: duplicate version, approve version (locks edits), and margin calculations (total cost, total revenue, margin $ and %)
+Planning (templates → tasks + milestones)
+Template: name, eventType
+TemplateTask: templateId, title, milestone, offsetDaysFromStart, defaultOwnerRole (string)
+Milestone: projectId, title, sortOrder
+Task: projectId, title, milestoneId, ownerUserId (nullable), dueDate, status (Todo/Doing/Done)
+“Create project from template” should generate milestones + tasks with due dates computed from project.startDate + offset.
+Vendors + Purchasing (lightweight)
+Vendor: name, email, phone, tags/categories (string or join table)
+VendorQuote: projectId, vendorId, amount, notes, status (Draft/Selected/Rejected)
+Purchase: projectId, vendorId, description, amount, status (Requested/Approved/Paid)
+Purchases should roll into Actuals (costs)
+Staffing + Holds
+Person: name, type (Employee/Freelancer), email, defaultCostRate, defaultBillRate
+StaffingAssignment: projectId, personId, role, startDate, endDate, state (Hold/Confirmed), costAmount, billAmount
+Implement a simple conflict checker: show when a person has overlapping assignments in date range.
+Actuals + Closeout Exports
+Actuals view: Approved Estimate totals vs Actual totals (Purchases + Staffing + ManualAdjustments)
+ManualAdjustment: projectId, description, amount, type (Cost/Revenue)
+Exports:
+Client invoice-ready CSV grouped by category (from Approved Estimate)
+Vendor payables CSV listing Purchases
+Project can be marked Closed.
+NON-GOALS (do not build):
+
+Full GL/accounting, bank sync, taxes
+Inventory, shipping, complex permissions, gantt, dependencies
+DELIVERABLES:
+A) Working app with basic navigation + CRUD for entities above
+B) Seed data script to create: 1 org, 2 users, 2 clients, 1 opportunity, 1 project, 1 template, 5 template tasks
+C) Clear README with setup steps and how to run migrations/seeding
+
+BUILD ORDER (do in this order):
+
+Scaffold Next.js app + DB + Prisma
+Auth + org scoping
+Clients/Contacts + Opportunities + Convert to Project
+Project hub routes
+Estimating with versions + margin calc
+Templates → Tasks/Milestones
+Vendors + Quotes + Purchases
+People + Staffing + Conflict checker
+Actuals rollups + CSV exports
+Seed script + polish
+QUALITY BAR:
+
+Every page should work end-to-end with server actions or API routes.
+Use transactions where needed (convert opportunity, duplicate estimate version, apply template).
+Validate inputs and handle nulls safely.

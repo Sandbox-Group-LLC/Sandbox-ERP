@@ -1,0 +1,73 @@
+Implement Phase 2A: Forecast + Actuals ingestion + Reconciliation for the Budget Engine.
+
+Context:
+- Budget Engine v1 exists with Budget, BudgetLine, TaxCode, StaffingRate and computed columns.
+- Replit Auth is used. All data is org/project scoped.
+
+Add Prisma models:
+1) ExpenseEntry (forecast source)
+- id (cuid)
+- projectId (FK)
+- budgetLineId (nullable FK to BudgetLine)
+- date (DateTime)
+- vendor (String nullable)
+- description (String)
+- amount (Decimal)
+- notes (String nullable)
+- createdByUserId (FK to User)
+- createdAt
+
+2) ActualCostEntry (actual source)
+- same fields as ExpenseEntry
+
+Migrations + seed:
+- add the models, run migrations
+- seed a few entries for a sample project
+
+UI routes/pages:
+A) /projects/[id]/expense-tracker
+- table CRUD for ExpenseEntry (create/edit/delete)
+- CSV import:
+  - upload CSV
+  - map columns to: date, vendor, description, amount, notes
+  - create entries in bulk
+- per-entry action: “Link to Budget Line”
+  - dropdown search of BudgetLines (by description)
+  - sets budgetLineId
+
+B) /projects/[id]/actual-costs
+- same as above but for ActualCostEntry
+
+C) /projects/[id]/budget/reconcile
+- show 4 panels:
+  1) Unmatched ExpenseEntries (budgetLineId null AND no exact description match)
+  2) Unmatched ActualCostEntries (budgetLineId null AND no exact description match)
+  3) Multi-match warnings:
+     - entries where description matches >1 BudgetLine in the project
+  4) Top variance lines:
+     - BudgetLines sorted by abs(internalCost - forecast) desc (limit 20)
+- Each unmatched entry should have quick actions:
+  - link to budget line
+  - edit description
+  - delete
+
+Calculation updates (shared TS):
+Update BudgetLine computed values:
+- forecast:
+  1) sum(ExpenseEntry.amount) where budgetLineId == this line.id, if any exist
+  2) else if vendor == "Expense Tracker": sum(ExpenseEntry.amount) where projectId == line.projectId AND description == line.description
+  3) else keep v1 rule: (ovh ? 0 : internalCost)
+- actual:
+  1) sum(ActualCostEntry.amount) where budgetLineId == this line.id, if any exist
+  2) else sum(ActualCostEntry.amount) where projectId == line.projectId AND description == line.description
+
+Guardrails:
+- Do NOT add accounting integrations, invoices, payments, QuickBooks, etc.
+- Do NOT refactor auth.
+- Do NOT change BudgetLine schema besides what is necessary for linking.
+
+Deliverables:
+- Working CRUD pages + CSV import
+- Reconcile view
+- Updated budget computations reflect imported data
+- Basic tests for matching/linking logic

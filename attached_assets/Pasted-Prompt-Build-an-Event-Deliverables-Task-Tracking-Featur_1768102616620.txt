@@ -1,0 +1,67 @@
+Prompt: Build an Event Deliverables/Task Tracking Feature
+Build a Deliverables tracking system - a task management feature for tracking event-related tasks with status boards and table views.
+
+Core Functionality:
+Create, edit, and track tasks (deliverables) associated with events
+Kanban board view with 4 status columns: To Do → In Progress → In Review → Done
+Table view with sortable columns
+Filter by event
+Assign tasks to team members
+Data Model (deliverables table):
+deliverables:
+  id: uuid primary key
+  organizationId: foreign key to organizations (required)
+  eventId: foreign key to events (required)
+  title: varchar(255) required
+  description: text (optional)
+  workstream: varchar(100) - one of: marketing, logistics, content, speakers, sponsorship, registration, production, creative, operations, other
+  phase: varchar(50) - one of: pre_program (Pre-Program), live (Program-Live), post_program (Post-Program)
+  executionTime: timestamp (optional, for live phase tasks)
+  status: varchar(50) - one of: todo, in_progress, review, done
+  priority: varchar(20) - one of: low, medium, high, urgent
+  assignedTo: foreign key to users (optional)
+  dueDate: date (optional)
+  createdAt: timestamp
+  updatedAt: timestamp
+UI Features:
+1. Status Summary Cards (top of page)
+
+4 cards showing count for each status
+Icons: Circle (todo), Clock (in_progress), AlertCircle (review), CheckCircle (done)
+Color coding for status
+2. Filter Controls
+
+Event dropdown to filter deliverables by event
+"All Events" option
+3. Table View with Sortable Columns:
+
+Title, Event, Status, Priority, Workstream, Phase, Assignee, Due Date
+Click column headers to sort (asc → desc → no sort)
+Priority badges with colors: outline (low), secondary (medium), default (high), destructive (urgent)
+Assignee shows avatar + name
+Click row to edit
+4. Create/Edit Dialog:
+
+Event selector (required)
+Title (required)
+Description (optional textarea)
+Workstream dropdown
+Assignee dropdown (shows team member avatars)
+Status dropdown
+Priority dropdown
+Phase dropdown
+Due Date picker
+Execution Time (only shown when phase = "live")
+API Endpoints:
+GET /api/deliverables - List all deliverables for organization
+POST /api/deliverables - Create new deliverable
+PATCH /api/deliverables/:id - Update deliverable
+DELETE /api/deliverables/:id - Delete deliverable
+GET /api/organization/assignees - Get list of team members for assignment dropdown
+Key Implementation Notes:
+Scope all queries by organizationId for multi-tenancy
+Use React Query for data fetching with cache invalidation on mutations
+Use react-hook-form with zod validation for the form
+Status icons should have appropriate colors (muted for todo, blue for in_progress, amber for review, green for done)
+Show loading skeletons while fetching data
+Show empty state with "Add Deliverable" button when no deliverables exist

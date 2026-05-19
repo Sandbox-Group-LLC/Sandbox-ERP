@@ -1,0 +1,260 @@
+PHASE 2D — PROACTIVE ALERTS (AI-NATIVE, HIGH SIGNAL, NO SPAM)
+
+Context:
+We have an event ERP with:
+- Budget Engine (deterministic compute modules)
+- Expense Tracker (forecast entries)
+- Actual Costs (actual entries)
+- Staffing Plan (weekly role hours grid)
+- Tasks/Milestones (optional but likely present)
+- OpenAI GPT-5.2 for ERP Insights w/ tool calling
+
+Goal:
+Implement proactive alerts that automatically detect project risk (margin, unmatched costs, forecast drift, staffing overload, deadlines, approvals) and present them in-app (Inbox + Project banner). Alerts must be actionable, deduped, rate-limited, and driven by canonical compute modules.
+
+NON-GOALS:
+- No Slack/email notifications in this phase
+- No accounting integrations
+- Do not re-implement budget math; ALWAYS call existing compute modules
+- Do not spam users; must dedupe + cooldown
+
+────────────────────────────────────────
+1) DATA MODELS (Prisma)
+────────────────────────────────────────
+Add these models:
+
+AlertEvent:
+- id (cuid)
+- orgId (FK)
+- projectId (FK nullable, but most will use it)
+- ruleType (enum)
+- severity (enum: INFO, WARN, CRITICAL)
+- title (string)
+- body (string)
+- data (JSON) // include drivers + links + numbers
+- dedupeKey (string) // unique key for de-dupe
+- cooldownUntil (DateTime nullable)
+- createdAt (DateTime default now)
+- resolvedAt (DateTime nullable)
+- lastFiredAt (DateTime default now)
+
+AlertRecipient:
+- id (cuid)
+- alertEventId (FK)
+- userId (FK)
+- readAt (DateTime nullable)
+
+AlertRuleConfig (optional but recommended minimal config):
+- id (cuid)
+- orgId (FK)
+- key (string unique per org) // e.g. "MARGIN_BELOW_TARGET"
+- isEnabled (bool default true)
+- config (JSON) // thresholds like { "minMargin": 0.25, "cooldownHours": 24 }
+
+Enums:
+AlertRuleType:
+- MARGIN_BELOW_TARGET
+- MARGIN_DROP_24H
+- UNMATCHED_ACTUALS
+- UNMATCHED_FORECAST
+- LINE_FORECAST_OVER_BUDGET
+- SECTION_FORECAST_OVER_BUDGET
+- STAFFING_OVER_CAP_NEXT_WEEK
+- ONSITE_UNDERSTAFFED
+- PURCHASE_APPROVAL_AT_RISK (only if PurchaseRequests exist; else stub)
+- CRITICAL_TASK_DUE_SOON (only if Tasks exist; else stub)
+
+Severity:
+- INFO, WARN, CRITICAL
+
+────────────────────────────────────────
+2) ALERT ENGINE (SERVER)
+────────────────────────────────────────
+Create: src/domain/alerts/engine.ts
+
+It must expose:
+- evaluateAlertsForProject(projectId)
+- evaluateAlertsForOrg(orgId)
+
+It must call canonical compute modules:
+- computeBudget(projectId, scopes: summary | variance | reconcile | lines)
+- computeStaffingPlan(projectId)
+
+It must NEVER calculate budget totals itself.
+
+De-dupe + cooldown:
+- dedupeKey format: `${ruleType}:${projectId}:${dimension}`
+  - dimension examples: "project", "weekStart:2026-03-10", "section:Scenic", "line:<budgetLineId>"
+- If an active AlertEvent exists with same dedupeKey and now < cooldownUntil:
+  - do not create a new one
+- If severity worsens significantly (e.g. margin drops further by > 2 pts, unmatched total increases by > $2k), update existing alert and bump lastFiredAt.
+
+Resolution:
+- If condition no longer true, mark resolvedAt.
+
+Recipients:
+- Determine recipients as:
+  - project owner (if exists)
+  - plus org admins
+(If you have teams, use them; otherwise keep simple.)
+
+Store alert body/title deterministically (no LLM required).
+Optionally add an OpenAI-generated “explanation” field later, but NOT required.
+
+────────────────────────────────────────
+3) TRIGGERS / SCHEDULING
+────────────────────────────────────────
+Implement evaluation triggers:
+A) On relevant writes:
+- after importing/creating ExpenseEntry
+- after importing/creating ActualCostEntry
+- after updating StaffingAllocation
+B) Nightly job:
+- evaluateAlertsForOrg(orgId) once per day
+
+Implementation options:
+- If you have a job runner, use it.
+- If not, implement a simple scheduled evaluator endpoint and a lightweight timer in the server (acceptable in Replit MVP), OR run on first request daily per org (lazy evaluation) with caching.
+
+Add a safety cap:
+- max 50 alerts created/updated per org per run.
+
+────────────────────────────────────────
+4) ALERT RULES TO SHIP (THE FIRST 10)
+────────────────────────────────────────
+
+Defaults (store in AlertRuleConfig; allow later changes):
+- cooldownHours: 24 for most rules
+- marginTarget: from project Assumptions if stored; else org default (e.g. 0.30)
+- marginCriticalThreshold: 0.20
+- marginDropPoints: 0.03 (3 pts)
+- unmatchedActualThreshold: 5000
+- unmatchedForecastThreshold: 5000
+- lineOverBudgetAbs: 2000
+- lineOverBudgetPct: 0.20
+- sectionOverBudgetAbs: 5000
+- sectionOverBudgetPct: 0.10
+- staffingWeeklyCap default:
+  Producer 40, PM 40, Designer 35, TD 45 (configurable)
+- onsiteMinHours baseline: configurable (can start disabled)
+
+Rule A1) MARGIN_BELOW_TARGET
+Trigger:
+- computeBudget.summary.forecastMargin < targetMargin
+Severity:
+- WARN if below target
+- CRITICAL if < marginCriticalThreshold
+Message includes:
+- forecastMargin, targetMargin, revenue, cogsForecast
+- top 3 variance drivers (from computeBudget.variance)
+
+Rule A2) MARGIN_DROP_24H
+Need to store previous daily snapshot:
+- Create BudgetSnapshotDaily(projectId, date, forecastMargin, revenue, cogsForecast)
+Compute:
+- if today.forecastMargin <= yesterday.forecastMargin - marginDropPoints
+Severity: WARN
+Message includes delta and top 3 drivers.
+
+Rule A3) UNMATCHED_ACTUALS
+From computeBudget.reconcile:
+- totalUnmatchedActualAmount > threshold OR count > N (e.g. 10)
+Severity:
+- WARN at threshold
+- CRITICAL if > 2x threshold
+Message includes largest unmatched entries + link.
+
+Rule A4) UNMATCHED_FORECAST
+Same but forecast entries.
+
+Rule A5) LINE_FORECAST_OVER_BUDGET
+For each budget line:
+- forecast > internalCost AND (forecast-internalCost) > lineOverBudgetAbs AND ((forecast/internalCost)-1) > lineOverBudgetPct
+Severity: WARN
+dimension: line:<budgetLineId>
+Message includes line description and deltas.
+
+Rule A6) SECTION_FORECAST_OVER_BUDGET
+Aggregate by section (PASSTHROUGH, MAS, etc. or your category field if present):
+- sectionForecast > sectionBudget AND exceeds abs/pct thresholds
+Severity: WARN
+dimension: section:<sectionName>
+
+Rule A7) STAFFING_OVER_CAP_NEXT_WEEK
+From computeStaffingPlan:
+- compute next weekStart
+- if roleHours > roleCap
+Severity: WARN (CRITICAL if > cap * 1.5)
+dimension: weekStart:<date>:role:<role>
+Message includes role, week, planned hours, cap.
+
+Rule A8) ONSITE_UNDERSTAFFED (optional default disabled)
+If you have a way to identify onsite week (project start week):
+- planned hours that week < onsiteMinHours baseline
+Severity: WARN
+dimension: onsiteWeek:<date>
+
+Rule A9) PURCHASE_APPROVAL_AT_RISK (only if purchases exist)
+If PurchaseRequest model exists:
+- status REQUESTED and age > 24h and event within 7 days
+Severity: WARN/CRITICAL based on proximity
+dimension: purchaseQueue
+
+Rule A10) CRITICAL_TASK_DUE_SOON (only if tasks exist)
+If Task model exists:
+- dueDate within 72h and status != DONE and isCritical == true OR milestone == "Onsite"
+Severity: WARN
+dimension: task:<taskId>
+
+If purchases/tasks do not exist yet, implement the rule stubs but keep disabled.
+
+────────────────────────────────────────
+5) UI — ALERTS INBOX + PROJECT BANNERS
+────────────────────────────────────────
+
+A) Global Alerts Inbox
+Route: /alerts
+- list AlertEvents for the current user (join AlertRecipient)
+- filter: unread, severity, project
+- mark read action (sets AlertRecipient.readAt)
+
+B) Project Banner
+On project overview page:
+- show active alerts count + highest severity
+- link to /projects/[id]/alerts
+
+C) Project Alerts Page
+Route: /projects/[id]/alerts
+- list active alerts for project
+- include "Open Reconcile" shortcuts for reconcile-related alerts
+- include "Open Staffing Plan week" shortcuts (pass weekStart in query)
+
+Linking:
+- In AlertEvent.data include:
+  - actionUrl (string)
+  - context (JSON) e.g. { weekStart, lineId, section }
+
+────────────────────────────────────────
+6) QA / ACCEPTANCE TESTS
+────────────────────────────────────────
+Add tests to validate:
+- de-dupe: same rule does not create new alert within cooldown
+- resolution: alert resolves when condition no longer true
+- margin rule triggers correctly given computeBudget outputs
+- unmatched actuals triggers when reconcile output exceeds thresholds
+- staffing cap triggers for next week
+
+Manual verification steps:
+- import unmatched actuals > $5k → alert created
+- link costs, recalc reconcile → alert resolves
+- adjust staffing plan hours above cap next week → staffing alert created
+
+────────────────────────────────────────
+7) DO NOT BREAK EXISTING FEATURES
+────────────────────────────────────────
+- Do not refactor auth.
+- Do not change existing compute logic except to expose needed summary/variance/reconcile helpers.
+- Avoid performance pitfalls: computeBudget can be expensive; cache per project for a short TTL (e.g., 60s) during an evaluation run.
+
+DELIVERABLE:
+A working, in-app proactive alert system with the first 10 rules, using canonical compute modules, with dedupe + cooldown + resolution.

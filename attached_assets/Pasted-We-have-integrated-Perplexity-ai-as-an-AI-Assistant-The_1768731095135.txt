@@ -1,0 +1,155 @@
+We have integrated Perplexity.ai as an AI Assistant.
+The integration works, but the current implementation is WRONG.
+
+STOP implementing:
+- hard-coded answers
+- question-specific handlers
+- manual calculations inside AI routes
+
+START implementing:
+A proper AI Tool + Compute Layer that exposes the domain model and canonical calculation engine so the AI can answer arbitrary questions autonomously.
+
+────────────────────────────────────────
+CORE PRINCIPLE (NON-NEGOTIABLE)
+────────────────────────────────────────
+The AI must NEVER re-implement business logic.
+
+All math, rollups, and interpretations must come from the SAME shared computation modules used by:
+- the UI
+- exports
+- reports
+- the AI assistant
+
+LLMs interpret results.
+They do NOT calculate core numbers.
+
+────────────────────────────────────────
+STEP 1 — CANONICAL COMPUTE MODULES
+────────────────────────────────────────
+Create or refactor shared domain modules:
+
+1) src/domain/budget/compute.ts
+Must expose functions like:
+- computeBudgetSummary(projectId)
+- computeBudgetLines(projectId)
+- computeBudgetVariance(projectId)
+- computeBudgetReconcile(projectId)
+
+These functions must:
+- use BudgetLines
+- use ExpenseEntry (linked first, description fallback)
+- use ActualCostEntry (linked first, description fallback)
+- apply all existing Budget Engine v1 rules
+- return structured JSON (no formatting)
+
+2) src/domain/staffing/compute.ts
+Expose:
+- computeStaffingPlan(projectId)
+- totals by role
+- totals by week
+- planned vs actual (future-ready)
+
+These modules are the SINGLE SOURCE OF TRUTH.
+
+────────────────────────────────────────
+STEP 2 — AI TOOL API (READ-ONLY)
+────────────────────────────────────────
+Create org-scoped, authenticated, read-only endpoints specifically for AI use.
+
+Required endpoints:
+
+GET /api/ai/schema
+Returns:
+- entities
+- fields
+- relationships
+- explanation of calculation rules
+- notes like:
+  “Forecast prefers linked ExpenseEntries, else description match”
+
+GET /api/ai/projects
+GET /api/ai/projects/:id
+
+POST /api/ai/budget/compute
+Body:
+{
+  "projectId": "...",
+  "scope": "summary | lines | variance | reconcile"
+}
+
+GET /api/ai/staffing/plan?projectId=...
+
+OPTIONAL (if needed):
+GET /api/ai/expense-entries?projectId=...
+GET /api/ai/actual-costs?projectId=...
+
+Rules:
+- These endpoints MUST call the shared compute modules.
+- NO calculations inside route handlers.
+- Org scoping via Replit Auth is mandatory.
+
+────────────────────────────────────────
+STEP 3 — AI QUERY ROUTER (NO HARD-CODING)
+────────────────────────────────────────
+Refactor the AI Assistant logic so that:
+
+- User asks a question in natural language
+- System determines which AI tools/endpoints to call
+- System retrieves structured JSON
+- AI formats and explains the result
+
+DO NOT:
+- pattern-match questions
+- write if/else logic for specific prompts
+- assume question intent without data retrieval
+
+The AI must be able to answer:
+- “Why is margin down?”
+- “What’s driving forecast variance?”
+- “Which roles are overplanned?”
+- “Show unmatched actuals”
+WITHOUT new code per question.
+
+────────────────────────────────────────
+STEP 4 — AUDIT + SAFETY
+────────────────────────────────────────
+Add AI query logging:
+
+Model:
+AiQueryLog {
+  id
+  userId
+  projectId?
+  question
+  toolsCalled (JSON)
+  createdAt
+}
+
+Log:
+- every AI question
+- which endpoints/tools were used
+- project scope if applicable
+
+This is required for trust and debugging.
+
+────────────────────────────────────────
+STEP 5 — REMOVE BAD PATTERNS
+────────────────────────────────────────
+Delete or refactor any of the following:
+- AI routes that calculate totals themselves
+- “answer handlers” per question
+- duplicated budget math
+- prompt-only logic without data retrieval
+
+────────────────────────────────────────
+DELIVERABLES (DEFINITION OF DONE)
+────────────────────────────────────────
+1) Shared compute modules for Budget + Staffing
+2) AI Tool API endpoints calling those modules
+3) Perplexity integration uses tools/data, not hard-coded answers
+4) AI can answer NEW questions without new code
+5) No duplicated business logic anywhere
+
+If a calculation exists in the UI, the AI MUST call the same function.
+
+If this architecture is violated, STOP and refactor before proceeding.

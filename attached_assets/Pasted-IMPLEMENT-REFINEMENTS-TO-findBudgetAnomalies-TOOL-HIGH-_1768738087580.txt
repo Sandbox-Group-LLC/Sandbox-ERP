@@ -1,0 +1,171 @@
+IMPLEMENT REFINEMENTS TO findBudgetAnomalies TOOL (HIGH SIGNAL, LOW FALSE POSITIVES, FAST)
+
+Context:
+We already have a working tool:
+findBudgetAnomalies(anomalyType?, threshold?, limit?, projectStatus?)
+It scans across projects and returns line-level anomalies (forecast/actual/budget variance).
+We want to refine correctness, add unmatched_actual, add driver context, and improve performance without breaking existing behavior.
+
+DO NOT:
+- break current API signature (backward compatible)
+- re-implement core budget calculations outside canonical compute modules
+- add UI in this change (API + compute only)
+
+────────────────────────────────────────
+1) UPDATE TOOL CONTRACT (BACKWARD COMPATIBLE)
+────────────────────────────────────────
+Keep existing params, add optional params:
+
+- anomalyType?: "over_forecast" | "over_budget" | "high_variance" | "unmatched_actual"
+- threshold?: number (default 100)            // absolute dollar variance floor
+- limit?: number (default 20)
+- projectStatus?: string[] (default ["Active","Onsite"])
+- minBase?: number (default 200)             // ignore tiny lines where amounts are too small
+- variancePercentThreshold?: number (default 0.20)
+- epsilon?: number (default 10)              // rounding tolerance for over_* comparisons
+- section?: string (optional filter)
+- vendor?: string (optional filter)
+- clientId?: string (optional filter)
+- dateFrom?: string (optional ISO date, for drivers filtering)
+- dateTo?: string (optional ISO date)
+
+Return schema MUST remain superset of existing fields; add new fields:
+
+Per line item return:
+- projectId, projectName, clientName, projectStatus
+- lineId, lineName/description, section
+- anomalyType
+- internalCost, forecast, actual
+- variance, variancePercent
+- severity (LOW/MEDIUM/HIGH/CRITICAL)
+NEW:
+- matchMode: "linked" | "description" | "ambiguous" | "unmatched"   // indicates how actual/forecast was associated
+- denominatorUsed: "max(forecast,actual,1)"                         // for transparency
+- topActualDrivers?: [{ id, date, vendor, description, amount, linkedToLine: boolean }]
+- topForecastDrivers?: [{ id, date, vendor, description, amount, linkedToLine: boolean }]
+- lastUpdatedAt?: string
+
+────────────────────────────────────────
+2) CORRECTNESS REFINEMENTS (REDUCE FALSE POSITIVES)
+────────────────────────────────────────
+
+A) over_forecast definition:
+- Only evaluate if forecast >= minBase (default 200)
+- Trigger if actual > forecast + epsilon
+- variance = actual - forecast
+- variancePercent = variance / denom where denom = max(actual, forecast, 1)
+
+B) over_budget definition:
+- Only evaluate if internalCost >= minBase
+- Trigger if actual > internalCost + epsilon
+- variance = actual - internalCost
+- variancePercent = variance / max(actual, internalCost, 1)
+
+C) high_variance definition:
+- Evaluate only if max(actual, forecast) >= minBase
+- Let diff = abs(actual - forecast)
+- denom = max(actual, forecast, 1)  // avoid division by ~0
+- variancePercent = diff / denom
+- Trigger if variancePercent >= variancePercentThreshold AND diff >= threshold
+
+D) unmatched_actual (NEW):
+- Identify actual cost entries that are NOT linked (budgetLineId null) AND
+  do not match exactly one BudgetLine by description (0 matches OR >1 matches).
+- Aggregate by project + (optional) suspected lineName or vendor.
+- Return “lineId” nullable; if ambiguous, provide candidateLines array (optional) in data.
+- Severity based on total unmatched amount.
+
+E) Severity:
+LOW: < 500
+MEDIUM: 500-2000
+HIGH: 2000-5000
+CRITICAL: >= 5000
+Use abs(variance) or unmatched total.
+
+────────────────────────────────────────
+3) DRIVER CONTEXT (WHY IT HAPPENED)
+────────────────────────────────────────
+For each returned anomaly, include drivers:
+
+- topActualDrivers: top 3 ActualCostEntries contributing to the line’s actual total
+- topForecastDrivers: top 3 ExpenseEntries contributing to forecast total
+Respect dateFrom/dateTo if provided.
+
+Also compute matchMode:
+- "linked" if majority of the amount comes from explicitly linked entries (budgetLineId == lineId)
+- "description" if derived from description match only
+- "ambiguous" if description matches multiple lines (for unmatched_actual)
+- "unmatched" if no match
+
+Implementation note:
+If your compute module already exposes reconcile info, reuse it.
+
+────────────────────────────────────────
+4) PERFORMANCE (MAKE IT FAST ENOUGH TO RUN OFTEN)
+────────────────────────────────────────
+
+Preferred approach:
+Introduce a lightweight computed cache table:
+
+BudgetLineComputed:
+- id, projectId, budgetLineId
+- internalCost, forecast, actual
+- updatedAt
+
+Update strategy:
+- Recompute affected lines when:
+  - BudgetLine changes
+  - ExpenseEntry changes (recompute impacted lines + any vendor=="Expense Tracker" description matches)
+  - ActualCostEntry changes (same)
+- If implementing full incremental updates is too heavy now, implement:
+  - recompute per project with TTL caching (e.g., 60 seconds) during anomaly scan
+  - store in memory cache or DB keyed by (projectId, computedAt)
+
+Minimum acceptable performance for this PR:
+- findBudgetAnomalies across Active/Onsite projects should complete in < ~2 seconds for ~50 projects and thousands of entries.
+(Use caching to achieve this.)
+
+────────────────────────────────────────
+5) IMPLEMENTATION DETAILS
+────────────────────────────────────────
+- Implement tool in /api/ai/budget/anomalies (or existing route) with strict org scoping via Replit Auth.
+- Use canonical compute modules for internalCost/forecast/actual values.
+- Do NOT calculate core totals in the route; route coordinates calls + filters results.
+- Add unit tests for:
+  - denom logic (no divide by zero)
+  - minBase behavior
+  - epsilon tolerance
+  - unmatched_actual classification (0 matches vs >1 matches)
+  - severity thresholds
+- Add integration test that seeds 2 projects and returns expected anomalies.
+
+────────────────────────────────────────
+6) OUTPUT EXAMPLES (MUST MATCH)
+────────────────────────────────────────
+Example for over_forecast:
+- anomalyType: "over_forecast"
+- variance = actual - forecast (positive)
+- variancePercent = variance / max(actual, forecast, 1)
+- severity derived from abs(variance)
+
+Example for unmatched_actual:
+- anomalyType: "unmatched_actual"
+- actual = total unmatched amount (or per-entry amount if returning granular)
+- forecast/internalCost can be null
+- matchMode: "unmatched" or "ambiguous"
+- include topActualDrivers list
+
+────────────────────────────────────────
+7) BACKWARD COMPATIBILITY
+────────────────────────────────────────
+Existing clients that call:
+findBudgetAnomalies({ anomalyType, threshold, limit, projectStatus })
+must still work and get the same fields as before.
+New fields are additive.
+
+Deliverables:
+- refined logic + new unmatched_actual type
+- drivers in response
+- caching / computed table or TTL cache
+- tests
+- documentation comment on the endpoint explaining anomaly definitions

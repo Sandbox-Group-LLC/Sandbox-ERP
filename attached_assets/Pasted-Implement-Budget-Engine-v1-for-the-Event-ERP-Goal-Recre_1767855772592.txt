@@ -1,0 +1,77 @@
+Implement Budget Engine v1 for the Event ERP.
+
+Goal:
+Recreate the behavior of the “Internal Budget” sheet as an in-app budget table with deterministic calculations.
+Do NOT recreate Excel. Calculations must be code, not formulas.
+
+Tech:
+- Next.js (App Router)
+- Prisma
+- Postgres
+- Replit Auth already in place
+
+Data Models (Prisma):
+- Budget: projectId, jurisdiction, baseMarkup
+- BudgetLine:
+  - budgetId, rowOrder
+  - section (PASSTHROUGH, MAS, STAFFING, SUMMARY)
+  - lineType (NORMAL, STAFFING)
+  - taxCategory, description, ovh, madeBy, vendor
+  - units (number)
+  - internalCostInput (nullable)
+  - markupOverride (nullable)
+  - internalNotes, clientNotes
+
+- TaxCode: categoryCode, jurisdiction, taxRate, defaultMarkup
+- StaffingRate: roleName, internalRate
+- ExpenseEntry: projectId, description, amount
+- ActualCostEntry: projectId, description, amount
+
+UI:
+- Spreadsheet-like table of BudgetLines sorted by rowOrder
+- Editable columns:
+  - taxCategory, description, ovh, madeBy, vendor
+  - units
+  - internalCostInput (disabled for STAFFING lines)
+  - markupOverride
+  - notes
+- Readonly computed columns:
+  - taxRate
+  - internalCost
+  - clientEstimate
+  - forecast
+  - variance
+  - actual
+  - remaining
+
+Calculations (shared TS module):
+- taxRate lookup by category + jurisdiction
+- internalCost:
+    - STAFFING:
+        if ovh: baseRate * units
+        else: baseRate * (units / 1.5) * 1.2285
+    - NORMAL: internalCostInput
+- markup = markupOverride ?? (defaultMarkup * budget.baseMarkup)
+- clientEstimate = internalCost * markup
+- forecast:
+    if ovh -> 0
+    else if vendor == "Expense Tracker" -> sum ExpenseEntry by description
+    else -> internalCost
+- actual = sum ActualCostEntry by description
+- variance = internalCost - forecast
+- remaining = forecast - actual
+
+Outputs:
+- Revenue, COGS Forecast, COGS Actual
+- Forecast Margin %, Actual Margin %
+
+Rules:
+- All calculations must be deterministic and testable
+- No spreadsheet libraries
+- No hardcoded row numbers
+- No UI totals that don’t match computed values
+
+Deliverables:
+- Working budget table page
+- Seed data for TaxCodes and StaffingRates
+- Unit tests validating calculations against known inputs

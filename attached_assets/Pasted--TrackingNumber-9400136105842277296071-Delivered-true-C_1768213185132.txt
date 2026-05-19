@@ -1,0 +1,149 @@
+{
+  "TrackingNumber": "9400136105842277296071",
+  "Delivered": true,
+  "Carrier": "",
+  "ServiceType": "USPS Ground Advantage<SUP>&#153;</SUP>",
+  "PickupDate": "",
+  "ScheduledDeliveryDate": "",
+  "ScheduledDeliveryDateInDateTimeFromat": null,
+  "StatusCode": "Delivered",
+  "Status": "Delivered, In/At Mailbox",
+  "StatusSummary": "Your item was delivered in or at the mailbox at 3:18 pm on January 5, 2026 in PORTLAND, OR 97209.",
+  "Message": "",
+  "DeliveredDateTime": "2026-01-05T23:18:17",
+  "DeliveredDateTimeInDateTimeFormat": null,
+  "SignatureName": "",
+  "DestinationCity": "",
+  "DestinationState": "",
+  "DestinationZip": "",
+  "DestinationCountry": null,
+  "EventDate": null,
+  "TrackingDetails": [
+    {
+      "EventDateTime": "2026-01-05T23:18:17",
+      "Event": "Delivered, In/At Mailbox",
+      "EventAddress": "PORTLAND OR 97209",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-05T14:10:00",
+      "Event": "Out for Delivery",
+      "EventAddress": "PORTLAND OR 97209",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-05T09:57:45",
+      "Event": "Arrived at Post Office",
+      "EventAddress": "PORTLAND OR 97209",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-05T08:58:56",
+      "Event": "Arrived at USPS Facility",
+      "EventAddress": "PORTLAND OR 97209",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-05T08:35:09",
+      "Event": "Departed USPS Facility",
+      "EventAddress": "PORTLAND OR 97215",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-05T00:39:45",
+      "Event": "Arrived at USPS Facility",
+      "EventAddress": "PORTLAND OR 97215",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-04T14:08:01",
+      "Event": "In Transit to Next Facility",
+      "EventAddress": "  ",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-03T14:18:38",
+      "Event": "In Transit to Next Facility",
+      "EventAddress": "  ",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-03T12:54:21",
+      "Event": "Departed USPS Regional Facility",
+      "EventAddress": "PHOENIX AZ DISTRIBUTION CENTER  ",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2026-01-03T06:15:06",
+      "Event": "Arrived at USPS Regional Facility",
+      "EventAddress": "PHOENIX AZ DISTRIBUTION CENTER  ",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "",
+      "Event": "In Transit to Next Facility",
+      "EventAddress": "  ",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2025-12-30T05:04:07",
+      "Event": "Arrived at USPS Regional Origin Facility",
+      "EventAddress": "JERSEY CITY NJ DISTRIBUTION CENTER  ",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2025-12-29T22:00:14",
+      "Event": "Departed Post Office",
+      "EventAddress": "SOUTH AMBOY NJ 08879",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    },
+    {
+      "EventDateTime": "2025-12-29T19:33:44",
+      "Event": "USPS in possession of item",
+      "EventAddress": "SOUTH AMBOY NJ 08879",
+      "State": "",
+      "City": "",
+      "Zip": "",
+      "EventDateTimeInDateTimeFormat": null
+    }
+  ]
+}

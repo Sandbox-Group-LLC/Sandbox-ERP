@@ -1,0 +1,97 @@
+1) Auto-ingest “Notes by Gemini” into Meeting Notes
+
+Problem: manual copy/paste is fragile and inconsistent.
+Suggestion: On each Client Call card, the “Notes” button should:
+
+fetch Gemini notes (if present)
+
+prefill the Meeting Notes textarea
+
+show a badge: “Gemini notes found / not found”
+
+auto-set Client + Meeting metadata for the analysis payload
+
+2) Store normalized meeting objects (not just pasted text)
+
+Add a meeting record schema:
+
+client_id, meeting_id, datetime, attendees, meeting_link
+
+raw_gemini_notes
+
+strategist_output (versioned)
+
+extracted_tasks (versioned)
+This enables re-analysis and “compare last call vs this call.”
+
+3) Add “Notes completeness” + “Evidence requirement” UI checks
+
+Before Analyze:
+
+a quick completeness indicator (length threshold, sections present)
+After Analyze:
+
+enforce “Evidence:” lines for all ranked recommendations (if missing, rerun or flag)
+
+4) Improve task creation by linking tasks to meeting + project automatically
+
+Right now “Extracted Action Items” is a panel; make it actionable:
+
+“Create tasks” button
+
+auto-link tasks to:
+
+selected project
+
+meeting record
+
+client
+
+allow user to assign owner + due date inline
+
+5) Add meeting-type templates to the analyzer
+
+Let user select a template (or auto-detect):
+
+Strategy workshop
+
+Creative brainstorm
+
+Ops alignment
+
+Measurement review
+
+Client status check
+Different templates alter the strategist emphasis and outputs.
+
+6) Add a “Client-ready deliverables” export
+
+One-click export to:
+
+Google Doc (client recap)
+
+Slack message (internal)
+
+Email draft (copy)
+
+“Next meeting agenda” (calendar description)
+
+7) Threading: show prior 2–3 calls context
+
+In Client Calls, add “Related calls” or “Last call summary” so strategist can:
+
+track decisions over time
+
+spot repeated blockers
+
+measure progress
+
+8) Keep Gemini Recorder and Strategist separate (you’re already doing this right)
+
+Continue separating:
+
+Recorder = objective capture (Gemini notes)
+
+Strategist = opinionated synthesis (OpenAI)
+
+This preserves trust and makes outputs more defensible.

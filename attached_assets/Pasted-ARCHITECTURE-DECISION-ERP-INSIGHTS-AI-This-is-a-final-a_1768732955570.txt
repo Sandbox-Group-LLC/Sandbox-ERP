@@ -1,0 +1,99 @@
+ARCHITECTURE DECISION — ERP INSIGHTS AI
+
+This is a final architectural decision. Do not debate or workaround it.
+
+────────────────────────────────────────
+DECISION
+────────────────────────────────────────
+ERP Insights MUST use OpenAI GPT-5.2 via the OpenAI API.
+
+Perplexity (Sonar / Sonar Pro) MUST NOT be used for ERP Insights,
+because Perplexity’s REST API does NOT support function/tool calling.
+
+Perplexity may remain ONLY for:
+- Web Search
+- External Research
+- Non-ERP informational queries
+
+ERP Insights = INTERNAL DATA + TOOLS → OpenAI GPT-5.2
+Web Research = INTERNET SEARCH → Perplexity
+
+────────────────────────────────────────
+WHY (NON-NEGOTIABLE)
+────────────────────────────────────────
+ERP Insights requires:
+- tool/function calling
+- multi-step reasoning
+- dynamic data retrieval
+- canonical compute reuse
+
+Perplexity Sonar does not support tool calling.
+Prefetching data and stuffing it into prompts is a fallback, not an acceptable long-term solution.
+
+Do NOT implement:
+- prefetch + system-prompt data dumps
+- hard-coded question handlers
+- manual calculation logic in AI routes
+
+────────────────────────────────────────
+IMPLEMENTATION REQUIREMENTS
+────────────────────────────────────────
+
+1) OpenAI Integration
+- Use OpenAI API with GPT-5.2 for ERP Insights.
+- Enable tool/function calling.
+- Tools must be defined explicitly and callable by the model.
+
+2) Canonical Tools (READ-ONLY)
+Expose the following tools to GPT-5.2:
+
+- searchProjects(query)
+- getProject(projectId)
+- computeBudget(projectId, scope)
+  scopes: summary | lines | variance | reconcile
+- getStaffingPlan(projectId)
+
+Rules:
+- These tools MUST call existing shared compute modules.
+- No calculations inside AI routes.
+- The AI never re-implements business logic.
+
+3) System Prompt (Stable Rules Only)
+- System prompt must describe:
+  - domain model
+  - available tools
+  - calculation rules at a high level
+- It must NOT contain live data or computed results.
+
+4) AI Query Flow
+For ERP Insights queries:
+- User asks question
+- GPT-5.2 decides which tools to call
+- Backend executes tool calls
+- GPT-5.2 synthesizes the answer
+- No new code required for new questions
+
+5) Perplexity Usage
+- Perplexity API is used ONLY for web search or research modes.
+- Perplexity must not access internal ERP data.
+- Perplexity must not compute budgets, staffing, or margin.
+
+────────────────────────────────────────
+CLEANUP REQUIRED
+────────────────────────────────────────
+Remove or refactor any of the following:
+- AI routes that compute totals directly
+- AI routes tied to Perplexity for ERP Insights
+- prompt-based logic that replaces tool calls
+- duplicated budget or staffing math
+
+────────────────────────────────────────
+DELIVERABLES (DEFINITION OF DONE)
+────────────────────────────────────────
+- ERP Insights runs on OpenAI GPT-5.2
+- GPT-5.2 uses function/tool calling
+- Budget + Staffing calculations come from shared compute modules
+- Perplexity is isolated to web research only
+- New ERP questions require ZERO new backend logic
+
+If tool calling is not being used for ERP Insights, the implementation is incorrect.

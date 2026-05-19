@@ -1,0 +1,2103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  sid     String   @id
+  sess    Json
+  expire  DateTime
+
+  @@index([expire])
+  @@map("sessions")
+}
+
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  logoUrl      String?
+  logoDarkUrl  String?
+  faviconUrl   String?
+  googleRefreshToken    String?
+  googleAccessToken     String?
+  googleTokenExpiry     DateTime?
+  googleConnectedEmail  String?
+  googleConnectedAt     DateTime?
+  googleOAuthNonce      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users                User[]
+  clients              Client[]
+  opportunities        Opportunity[]
+  projects             Project[]
+  templates            Template[]
+  documentTemplates    DocumentTemplate[]
+  vendors              Vendor[]
+  people               Person[]
+  staffingRoles        StaffingRole[]
+  roleRates            RoleRate[]
+  chatChannels         ChatChannel[]
+  userInvites          UserInvite[]
+  assets               Asset[]
+  proofRequests        ProofRequest[]
+  meetings             Meeting[]
+  alertEvents          AlertEvent[]
+  alertRuleConfigs     AlertRuleConfig[]
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+  EXTERNAL
+  CLIENT
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+model User {
+  id              String        @id
+  email           String?       @unique
+  passwordHash    String?
+  name            String?
+  firstName       String?
+  lastName        String?
+  profileImageUrl String?
+  role            UserRole      @default(MEMBER)
+  approvalStatus  ApprovalStatus @default(PENDING)
+  approvedById    String?
+  approvedBy      User?          @relation("UserApprovals", fields: [approvedById], references: [id])
+  approvedUsers   User[]         @relation("UserApprovals")
+  approvedAt      DateTime?
+  organizationId  String?
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  lastMessagesReadAt DateTime?
+  googleAccessToken  String?
+  googleRefreshToken String?
+  googleTokenExpiry  DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  ownedProjects      Project[]            @relation("ProjectOwner")
+  assignedTasks      Task[]
+  createdExpenses    ExpenseEntry[]       @relation("ExpenseCreator")
+  createdActuals     ActualCostEntry[]    @relation("ActualCreator")
+  pushSubscriptions  PushSubscription[]
+  chatMessages       ChatMessage[]
+  sentInvites        UserInvite[]         @relation("UserInvites")
+  createdBudgetVersions BudgetVersion[]   @relation("BudgetVersionCreator")
+  createdProofRequests ProofRequest[]     @relation("ProofRequestCreator")
+  aiQueryLogs        AiQueryLog[]
+  alertRecipients    AlertRecipient[]
+  createdDocFolders  DocFolder[]
+  uploadedDocFiles   DocFile[]
+  docComments        DocComment[]
+  expenseReports     ContractorExpenseReport[]  @relation("ExpenseReportSubmitter")
+  expenseReportActivities ContractorExpenseActivity[] @relation("ExpenseReportActivityActor")
+}
+
+model UserInvite {
+  id             String       @id @default(cuid())
+  email          String
+  token          String       @unique @default(cuid())
+  role           UserRole     @default(MEMBER)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  invitedById    String
+  invitedBy      User         @relation("UserInvites", fields: [invitedById], references: [id])
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([email, organizationId, acceptedAt])
+}
+
+model Client {
+  id             String       @id @default(cuid())
+  name           String
+  clientCode     String?
+  website        String?
+  industry       String?
+  address        String?
+  city           String?
+  state          String?
+  postalCode     String?
+  country        String?
+  notes          String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  contacts      Contact[]
+  opportunities Opportunity[]
+  projects      Project[]
+  receivables   Receivable[]
+  meetings      Meeting[]
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  role      String?
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum OpportunityStage {
+  Lead
+  Qualified
+  Proposal
+  Won
+  Lost
+}
+
+model Opportunity {
+  id              String           @id @default(cuid())
+  clientId        String
+  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  stage           OpportunityStage @default(Lead)
+  budgetRange     String?
+  eventType       String?
+  activationState String?
+  targetStartDate DateTime?
+  eventStartDate  DateTime?
+  eventEndDate    DateTime?
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  project Project?
+  budget  Budget?
+}
+
+enum ProjectStatus {
+  Draft
+  Active
+  Onsite
+  Closed
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  name            String
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id])
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  opportunityId   String?       @unique
+  opportunity     Opportunity?  @relation(fields: [opportunityId], references: [id])
+  eventType       String?
+  city            String?
+  venue           String?
+  startDate       DateTime?
+  endDate         DateTime?
+  status          ProjectStatus @default(Draft)
+  ownerUserId     String?
+  owner           User?         @relation("ProjectOwner", fields: [ownerUserId], references: [id])
+  budgetThreshold Float?
+  masterProductionDocUrl String?
+  proofSheetId       String?
+  proofSheetFolderId String?
+  assetSheetId       String?
+  assetSheetFolderId String?
+  budgetSheetId       String?
+  budgetSheetFolderId String?
+  cateringSheetId       String?
+  cateringSheetFolderId String?
+  clientTeamMembers  Json?    @default("[]")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  estimateVersions     EstimateVersion[]
+  milestones           Milestone[]
+  tasks                Task[]
+  vendorQuotes         VendorQuote[]
+  purchases            Purchase[]
+  staffingAssignments  StaffingAssignment[]
+  manualAdjustments    ManualAdjustment[]
+  budget               Budget?
+  expenseEntries       ExpenseEntry[]
+  actualCostEntries    ActualCostEntry[]
+  staffingPlan         StaffingPlan?
+  contracts            Contract[]
+  clientPortalAccess   ClientPortalAccess[]
+  budgetComments       BudgetComment[]
+  chatChannel          ChatChannel?
+  shippingItems        ShippingItem[]
+  receivables          Receivable[]
+  assetReservations    AssetReservation[]
+  proofRequests        ProofRequest[]
+  meetings             Meeting[]
+  runOfShows           RunOfShow[]
+  aiQueryLogs          AiQueryLog[]
+  alertEvents          AlertEvent[]
+  budgetSnapshots      BudgetSnapshotDaily[]
+  venueSearches        VenueSearch[]
+  docFolders           DocFolder[]
+  docFiles             DocFile[]
+  contractorExpenseReports ContractorExpenseReport[]
+  canvas               ProjectCanvas[]
+  roomingLists         RoomingList[]
+  housingHotels        HousingHotel[]
+  cateringSettings     CateringSettings?
+  cateringCategories   CateringCategory[]
+  menuTemplates        MenuTemplate[]
+}
+
+enum EstimateStatus {
+  Draft
+  Approved
+}
+
+model EstimateVersion {
+  id            String         @id @default(cuid())
+  projectId     String
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  status        EstimateStatus @default(Draft)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  lineItems EstimateLineItem[]
+
+  @@unique([projectId, versionNumber])
+}
+
+enum PricingMode {
+  PassThrough
+  Markup
+  Fixed
+}
+
+model EstimateLineItem {
+  id                String          @id @default(cuid())
+  estimateVersionId String
+  estimateVersion   EstimateVersion @relation(fields: [estimateVersionId], references: [id], onDelete: Cascade)
+  category          String
+  description       String
+  qty               Float           @default(1)
+  unitCost          Float           @default(0)
+  pricingMode       PricingMode     @default(PassThrough)
+  markupPercent     Float?
+  revenue           Float           @default(0)
+  vendorId          String?
+  vendor            Vendor?         @relation(fields: [vendorId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model Template {
+  id             String       @id @default(cuid())
+  name           String
+  eventType      String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tasks TemplateTask[]
+}
+
+model TemplateTask {
+  id                 String   @id @default(cuid())
+  templateId         String
+  template           Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title              String
+  milestone          String?
+  offsetDaysFromStart Int      @default(0)
+  defaultOwnerRole   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model DocumentTemplate {
+  id             String       @id @default(cuid())
+  name           String
+  description    String?
+  templateType   String       @default("Contract")
+  googleDocUrl   String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Milestone {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks Task[]
+}
+
+enum TaskStatus {
+  Todo
+  InProgress
+  Review
+  Done
+}
+
+enum TaskWorkstream {
+  MARKETING
+  LOGISTICS
+  CONTENT
+  SPEAKERS
+  SPONSORSHIP
+  REGISTRATION
+  PRODUCTION
+  CREATIVE
+  OPERATIONS
+  OTHER
+}
+
+enum TaskPhase {
+  PRE_PROGRAM
+  LIVE
+  POST_PROGRAM
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id            String         @id @default(cuid())
+  projectId     String
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  milestoneId   String?
+  milestone     Milestone?     @relation(fields: [milestoneId], references: [id])
+  ownerUserId       String?
+  owner             User?          @relation(fields: [ownerUserId], references: [id])
+  assigneePersonId  String?
+  assigneePerson    Person?        @relation(fields: [assigneePersonId], references: [id])
+  dueDate           DateTime?
+  executionTime DateTime?
+  status        TaskStatus     @default(Todo)
+  workstream    TaskWorkstream @default(OTHER)
+  phase         TaskPhase      @default(PRE_PROGRAM)
+  priority      TaskPriority   @default(MEDIUM)
+  isMilestone   Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  meetingExtractedTasks MeetingExtractedTask[]
+}
+
+model Vendor {
+  id             String       @id @default(cuid())
+  name           String
+  email          String?
+  phone          String?
+  contactName        String?
+  website            String?
+  billingAddress     String?
+  billingCity        String?
+  billingState       String?
+  billingZip         String?
+  billingCountry     String?
+  shippingAddress    String?
+  shippingCity       String?
+  shippingState      String?
+  shippingZip        String?
+  shippingCountry    String?
+  taxId              String?
+  notes              String?
+  paymentTerms       String?
+  categories     String?
+  stripeAccountId          String?
+  stripePayoutStatus       StripePayoutStatus @default(NOT_SETUP)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  quotes                    VendorQuote[]
+  purchases                 Purchase[]
+  estimateLineItems         EstimateLineItem[]
+  contracts                 Contract[]
+  contractParticipants      ContractParticipant[] @relation("ContractVendorParticipant")
+  shippingItems             ShippingItem[]
+  venueSearchEntries        VenueSearchEntry[]
+}
+
+enum QuoteStatus {
+  Draft
+  Selected
+  Rejected
+}
+
+model VendorQuote {
+  id        String      @id @default(cuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendorId  String
+  vendor    Vendor      @relation(fields: [vendorId], references: [id])
+  amount    Float       @default(0)
+  notes     String?
+  status    QuoteStatus @default(Draft)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+enum PurchaseStatus {
+  Requested
+  Approved
+  Paid
+}
+
+enum TransactionType {
+  CreditCard
+  ACH
+  Cash
+}
+
+model Purchase {
+  id              String          @id @default(cuid())
+  projectId       String
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendorId        String
+  vendor          Vendor          @relation(fields: [vendorId], references: [id])
+  budgetLineId    String?
+  budgetLine      BudgetLine?     @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
+  description     String
+  amount          Float           @default(0)
+  status          PurchaseStatus  @default(Requested)
+  purchaserId     String?
+  purchaser       Person?         @relation(fields: [purchaserId], references: [id], onDelete: SetNull)
+  transactionType TransactionType?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([budgetLineId])
+  @@index([purchaserId])
+}
+
+enum PersonType {
+  Employee
+  Freelancer
+}
+
+enum StripePayoutStatus {
+  NOT_SETUP
+  PENDING
+  ACTIVE
+  RESTRICTED
+}
+
+model Person {
+  id              String       @id @default(cuid())
+  firstName       String?
+  lastName        String?
+  name            String
+  type            PersonType   @default(Employee)
+  email           String?
+  phone           String?
+  defaultCostRate  Float        @default(0)
+  defaultBillRate  Float        @default(0)
+  clientBillRate   Float        @default(0)
+  portfolioUrl     String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  stripeAccountId          String?
+  stripePayoutStatus       StripePayoutStatus @default(NOT_SETUP)
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  assignments          StaffingAssignment[]
+  staffingAllocations  StaffingAllocation[]
+  onboardingDocuments  OnboardingDocument[]
+  contractParticipants ContractParticipant[]
+  contracts            Contract[]
+  assignedTasks        Task[]
+  shippingItems        ShippingItem[]
+  meetingExtractedTasks MeetingExtractedTask[]
+  timeEntries          TimeEntry[]
+  bankingInfo          PersonBankingInfo?
+  purchases            Purchase[]
+}
+
+model PersonBankingInfo {
+  id                String   @id @default(cuid())
+  personId          String   @unique
+  person            Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  
+  accessToken       String   @unique
+  expiresAt         DateTime
+  lastAccess        DateTime?
+  
+  bankName          String?
+  accountHolderName String?
+  routingNumber     String?
+  accountNumber     String?
+  accountType       String?
+  
+  submittedAt       DateTime?
+  submittedFromIp   String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+enum DocumentType {
+  NDA
+  COI
+  W9
+  CONTRACT
+  DIRECT_DEPOSIT
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  RECEIVED
+  VERIFIED
+  EXPIRED
+}
+
+model OnboardingDocument {
+  id            String         @id @default(cuid())
+  personId      String
+  person        Person         @relation(fields: [personId], references: [id], onDelete: Cascade)
+  documentType  DocumentType
+  status        DocumentStatus @default(PENDING)
+  fileName      String?
+  filePath      String?
+  expirationDate DateTime?
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([personId, documentType])
+  @@index([personId])
+}
+
+enum StaffingState {
+  Hold
+  Confirmed
+}
+
+model StaffingAssignment {
+  id             String        @id @default(cuid())
+  projectId      String
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  staffingPlanId String?
+  staffingPlan   StaffingPlan? @relation(fields: [staffingPlanId], references: [id], onDelete: Cascade)
+  personId       String
+  person         Person        @relation(fields: [personId], references: [id])
+  roleId         String
+  staffingRole   StaffingRole  @relation(fields: [roleId], references: [id])
+  startDate      DateTime
+  endDate        DateTime
+  billRate         Decimal       @default(0) @db.Decimal(10, 2)
+  costRate         Decimal       @default(0) @db.Decimal(10, 2)
+  clientBillRate   Decimal       @default(0) @db.Decimal(10, 2)
+  memo             String?
+  state          StaffingState @default(Hold)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  allocations StaffingAllocation[]
+
+  @@index([projectId])
+  @@index([staffingPlanId])
+  @@index([personId])
+  @@index([roleId])
+}
+
+enum AdjustmentType {
+  Cost
+  Revenue
+}
+
+model ManualAdjustment {
+  id          String         @id @default(cuid())
+  projectId   String
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description String
+  amount      Float          @default(0)
+  type        AdjustmentType
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+// ============================================
+// BUDGET ENGINE MODELS
+// ============================================
+
+model Budget {
+  id             String       @id @default(cuid())
+  projectId      String?      @unique
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  opportunityId  String?      @unique
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  jurisdiction   String       @default("California")
+  baseMarkup     Float        @default(1.0)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  lines BudgetLine[]
+  versions BudgetVersion[]
+}
+
+enum BudgetSection {
+  PASSTHROUGH
+  SANDBOX
+  STAFFING
+  SUMMARY
+}
+
+enum BudgetLineType {
+  NORMAL
+  STAFFING
+  SUBTOTAL
+}
+
+enum BudgetCategory {
+  VENUE_SERVICES
+  GUEST_SERVICES
+  ONSITE_SUPPORT
+  AUDIO_VISUAL
+  CATERING
+  ENVIRONMENTAL
+  CONTENT_DEVELOPMENT
+  DIGITAL_SERVICES
+  MERCHANDISE
+  INSURANCE
+  HEALTH_SAFETY
+  TRAVEL_EXPENSES
+  PRODUCTION_COSTS
+}
+
+model BudgetLine {
+  id                String          @id @default(cuid())
+  budgetId          String
+  budget            Budget          @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  rowOrder          Int
+  section           BudgetSection
+  lineType          BudgetLineType  @default(NORMAL)
+  category          BudgetCategory?
+  taxCategory       String?
+  description       String?
+  ovh               Boolean        @default(false)
+  vendor            String?
+  units             Float          @default(1)
+  internalCostInput Float?
+  markupOverride    Float?
+  internalNotes     String?
+  clientNotes       String?
+  processingFeeEnabled Boolean     @default(false)
+  processingFeePercent Float       @default(5)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  expenseEntries    ExpenseEntry[]
+  actualCostEntries ActualCostEntry[]
+  purchases         Purchase[]
+  roleLinks         BudgetLineRoleLink[]
+
+  @@index([budgetId, rowOrder])
+}
+
+model BudgetVersion {
+  id             String   @id @default(cuid())
+  budgetId       String
+  budget         Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  versionNumber  Int
+  title          String
+  notes          String?
+  jurisdiction   String
+  baseMarkup     Float
+  isClientVisible Boolean @default(false)
+  createdById    String?
+  createdBy      User?    @relation("BudgetVersionCreator", fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+
+  lines BudgetVersionLine[]
+
+  @@unique([budgetId, versionNumber])
+  @@index([budgetId])
+}
+
+model BudgetVersionLine {
+  id                   String          @id @default(cuid())
+  versionId            String
+  version              BudgetVersion   @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  originalLineId       String?
+  rowOrder             Int
+  section              BudgetSection
+  lineType             BudgetLineType  @default(NORMAL)
+  category             BudgetCategory?
+  taxCategory          String?
+  description          String?
+  ovh                  Boolean         @default(false)
+  vendor               String?
+  units                Float           @default(1)
+  internalCostInput    Float?
+  markupOverride       Float?
+  internalNotes        String?
+  clientNotes          String?
+  processingFeeEnabled Boolean         @default(false)
+  processingFeePercent Float           @default(5)
+
+  @@index([versionId, rowOrder])
+}
+
+model TaxCode {
+  id            String   @id @default(cuid())
+  categoryCode  String
+  jurisdiction  String
+  taxRate       Float    @default(0)
+  defaultMarkup Float    @default(1.0)
+  isTaxable     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([categoryCode, jurisdiction])
+  @@index([jurisdiction])
+}
+
+model StaffingRate {
+  id           String   @id @default(cuid())
+  roleName     String   @unique
+  internalRate Float    @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ExpenseEntry {
+  id              String      @id @default(cuid())
+  projectId       String
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetLineId    String?
+  budgetLine      BudgetLine? @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
+  date            DateTime    @default(now())
+  vendor          String?
+  description     String
+  amount          Float       @default(0)
+  notes           String?
+  createdByUserId String?
+  createdBy       User?       @relation("ExpenseCreator", fields: [createdByUserId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([projectId, description])
+  @@index([budgetLineId])
+}
+
+model ContractorExpenseReport {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation("ExpenseReportSubmitter", fields: [userId], references: [id])
+  date            DateTime @default(now())
+  amount          Float    @default(0)
+  category        String?
+  description     String
+  receiptUrl      String?
+  status          String   @default("draft")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  activities      ContractorExpenseActivity[]
+  lineItems       ContractorExpenseLineItem[]
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+}
+
+model ContractorExpenseLineItem {
+  id          String                  @id @default(cuid())
+  reportId    String
+  report      ContractorExpenseReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  category    String
+  subCategory String?
+  description String
+  amount      Float                   @default(0)
+  receiptUrl  String?
+  createdAt   DateTime                @default(now())
+
+  @@index([reportId])
+}
+
+model ContractorExpenseActivity {
+  id          String                  @id @default(cuid())
+  reportId    String
+  report      ContractorExpenseReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  actorUserId String
+  actor       User                    @relation("ExpenseReportActivityActor", fields: [actorUserId], references: [id])
+  action      String
+  comment     String?
+  createdAt   DateTime                @default(now())
+
+  @@index([reportId])
+}
+
+model ActualCostEntry {
+  id              String      @id @default(cuid())
+  projectId       String
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetLineId    String?
+  budgetLine      BudgetLine? @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
+  date            DateTime    @default(now())
+  vendor          String?
+  description     String
+  amount          Float       @default(0)
+  notes           String?
+  createdByUserId String?
+  createdBy       User?       @relation("ActualCreator", fields: [createdByUserId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([projectId, description])
+  @@index([budgetLineId])
+}
+
+model StaffingRole {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  roleRate          RoleRate?
+  allocations       StaffingAllocation[]
+  budgetLineLinks   BudgetLineRoleLink[]
+  assignments       StaffingAssignment[]
+  planRateOverrides StaffingPlanRoleRate[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model RoleRate {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roleId         String   @unique
+  role           StaffingRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  internalRate   Decimal  @default(0) @db.Decimal(10, 2)
+  billRate       Decimal? @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+model StaffingPlan {
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations   StaffingAllocation[]
+  assignments   StaffingAssignment[]
+  roleOverrides StaffingPlanRoleRate[]
+}
+
+model StaffingPlanRoleRate {
+  id               String       @id @default(cuid())
+  staffingPlanId   String
+  staffingPlan     StaffingPlan @relation(fields: [staffingPlanId], references: [id], onDelete: Cascade)
+  roleId           String
+  role             StaffingRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  overrideRate     Decimal      @db.Decimal(10, 2)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([staffingPlanId, roleId])
+  @@index([staffingPlanId])
+  @@index([roleId])
+}
+
+model StaffingAllocation {
+  id             String             @id @default(cuid())
+  staffingPlanId String
+  staffingPlan   StaffingPlan       @relation(fields: [staffingPlanId], references: [id], onDelete: Cascade)
+  assignmentId   String?
+  assignment     StaffingAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  roleId         String
+  role           StaffingRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  personId       String?
+  person         Person?            @relation(fields: [personId], references: [id])
+  weekStartDate  DateTime
+  plannedHours   Decimal            @default(0) @db.Decimal(10, 2)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([staffingPlanId, assignmentId, weekStartDate])
+  @@index([staffingPlanId])
+  @@index([assignmentId])
+  @@index([roleId])
+  @@index([personId])
+}
+
+model BudgetLineRoleLink {
+  id           String       @id @default(cuid())
+  budgetLineId String
+  budgetLine   BudgetLine   @relation(fields: [budgetLineId], references: [id], onDelete: Cascade)
+  roleId       String       @unique
+  role         StaffingRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
+
+  @@index([budgetLineId])
+}
+
+enum ContractStage {
+  Draft
+  InternalReview
+  VendorReview
+  Approved
+  SentForSignature
+  Signed
+}
+
+enum ParticipantRole {
+  Creator
+  InternalReviewer
+  VendorReviewer
+  Vendor
+  Signer
+}
+
+model Contract {
+  id                     String        @id @default(cuid())
+  projectId              String
+  project                Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendorId               String?
+  vendor                 Vendor?       @relation(fields: [vendorId], references: [id])
+  personId               String?
+  person                 Person?       @relation(fields: [personId], references: [id])
+  name                   String
+  googleDocId            String?
+  googleDocUrl           String?
+  stage                  ContractStage @default(Draft)
+  signedPdfPath          String?
+  signedAt               DateTime?
+  isFreelanceContractor  Boolean       @default(false)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  versions     ContractVersion[]
+  participants ContractParticipant[]
+
+  @@index([projectId])
+  @@index([vendorId])
+  @@index([personId])
+}
+
+model ContractVersion {
+  id          String   @id @default(cuid())
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionNum  Int
+  snapshotUrl String?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@unique([contractId, versionNum])
+  @@index([contractId])
+}
+
+model ContractParticipant {
+  id         String          @id @default(cuid())
+  contractId String
+  contract   Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  personId   String?
+  person     Person?         @relation(fields: [personId], references: [id])
+  vendorId   String?
+  vendor     Vendor?         @relation("ContractVendorParticipant", fields: [vendorId], references: [id])
+  email      String?
+  name       String?
+  role       ParticipantRole
+  signedAt   DateTime?
+  createdAt  DateTime        @default(now())
+
+  @@index([contractId])
+  @@index([personId])
+}
+
+// ============================================
+// CLIENT PORTAL ACCESS MODELS
+// ============================================
+
+model ClientPortalAccess {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  firstName   String
+  lastName    String
+  email       String
+  accessToken String   @unique
+  expiresAt   DateTime
+  lastAccess  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([accessToken])
+  @@index([email])
+}
+
+model BudgetComment {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  budgetLineId    String?
+  lineDescription String?
+  category        String?
+  field           String?
+  commenterName   String
+  commenterEmail  String
+  content         String
+  isResolved      Boolean  @default(false)
+  isInternal      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  messages        CommentMessage[]
+
+  @@index([projectId])
+  @@index([budgetLineId])
+  @@index([isInternal])
+}
+
+enum MessageAuthorType {
+  CLIENT
+  INTERNAL
+}
+
+model CommentMessage {
+  id              String            @id @default(cuid())
+  commentId       String
+  comment         BudgetComment     @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  authorType      MessageAuthorType
+  authorId        String?
+  authorName      String
+  authorEmail     String?
+  content         String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([commentId])
+}
+
+model PushSubscription {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint     String   @unique
+  p256dh       String
+  auth         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ============================================
+// TEAM MESSAGING MODELS
+// ============================================
+
+enum ChatChannelType {
+  GENERAL
+  PROJECT
+}
+
+model ChatChannel {
+  id             String          @id @default(cuid())
+  name           String
+  channelType    ChatChannelType @default(GENERAL)
+  projectId      String?         @unique
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  messages       ChatMessage[]
+
+  @@unique([organizationId, projectId])
+  @@index([organizationId])
+}
+
+model ChatMessage {
+  id          String      @id @default(cuid())
+  channelId   String
+  channel     ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User        @relation(fields: [authorId], references: [id])
+  content     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  mentions    ChatMention[]
+
+  @@index([channelId, createdAt])
+}
+
+enum MentionType {
+  USER
+  PROJECT
+  CLIENT
+  VENDOR
+  CONTRACT
+  OPPORTUNITY
+  TASK
+  PERSON
+}
+
+model ChatMention {
+  id          String      @id @default(cuid())
+  messageId   String
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  mentionType MentionType
+  entityId    String
+  displayText String
+  createdAt   DateTime    @default(now())
+
+  @@index([messageId])
+  @@index([entityId, mentionType])
+}
+
+enum ShippingItemType {
+  Decor
+  Furniture
+  Merch
+  Supplies
+}
+
+enum ShippingStatus {
+  Ordered
+  Shipped
+  Delivered
+}
+
+enum ShippingCarrier {
+  USPS
+  FedEx
+  UPS
+  DHL
+  Amazon
+  Other
+}
+
+model ShippingItem {
+  id                    String            @id @default(cuid())
+  projectId             String
+  project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  item                  String
+  type                  ShippingItemType?
+  vendor                String?
+  quantity              Int               @default(1)
+  purchaserId           String?
+  purchaser             Person?           @relation(fields: [purchaserId], references: [id])
+  orderNumber           String?
+  status                ShippingStatus    @default(Ordered)
+  deliveringToVendorId  String?
+  deliveringToVendor    Vendor?           @relation(fields: [deliveringToVendorId], references: [id])
+  estimatedDeliveryDate DateTime?
+  carrier               ShippingCarrier?
+  trackingNumber        String?
+  postEvent             String?
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([purchaserId])
+  @@index([deliveringToVendorId])
+
+  assets               Asset[]
+}
+
+model Receivable {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
+  poNumber    String?
+  poAmount    Decimal  @default(0) @db.Decimal(12, 2)
+  invoiced    Decimal  @default(0) @db.Decimal(12, 2)
+  uninvoiced  Decimal  @default(0) @db.Decimal(12, 2)
+  paid        Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([projectId])
+}
+
+enum AssetCategory {
+  Decor
+  Furniture
+  AV
+  Merch
+  Supplies
+  Signage
+  Fabricated
+  Other
+}
+
+enum AssetCondition {
+  Excellent
+  Good
+  Fair
+  Poor
+  Damaged
+}
+
+enum AssetStatus {
+  Available
+  Reserved
+  InUse
+  InTransit
+  Retired
+}
+
+model Asset {
+  id                String          @id @default(cuid())
+  assetCode         String?         @unique
+  name              String
+  description       String?
+  category          AssetCategory   @default(Other)
+  condition         AssetCondition  @default(Good)
+  status            AssetStatus     @default(Available)
+  quantity          Int             @default(1)
+  location          String?
+  barcode           String?
+  purchaseDate      DateTime?
+  purchaseCost      Decimal?        @db.Decimal(12, 2)
+  currentValue      Decimal?        @db.Decimal(12, 2)
+  imageUrl          String?
+  purchaseUrl       String?
+  notes             String?
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  sourceShippingId  String?
+  sourceShipping    ShippingItem?   @relation(fields: [sourceShippingId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  reservations      AssetReservation[]
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([status])
+}
+
+model AssetReservation {
+  id          String   @id @default(cuid())
+  assetId     String
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  quantity    Int      @default(1)
+  startDate   DateTime
+  endDate     DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([assetId])
+  @@index([projectId])
+  @@index([startDate, endDate])
+}
+
+// ============================================
+// PROOF APPROVAL PORTAL
+// ============================================
+
+enum ProofStatus {
+  REQUESTED
+  IN_PROGRESS
+  INTERNAL_REVIEW
+  CLIENT_REVIEW
+  REVISIONS_NEEDED
+  APPROVED
+  PRODUCTION
+  PREFLIGHT_REVIEW
+  PREFLIGHT_REVISIONS
+  PREFLIGHT_APPROVED
+  PRINTED
+  REJECTED
+  PENDING_REVIEW
+  REVISION_REQUESTED
+}
+
+enum ProofPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model ProofRequest {
+  id              String        @id @default(cuid())
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id])
+  
+  title           String
+  description     String?
+  clientEmail     String?
+  clientName      String?
+  designerName    String?
+  designerEmail   String?
+  printVendor     String?
+  area            String?
+  category        String?
+  dimensions      String?
+  material        String?
+  quantity        Int?
+  dueDate         DateTime?
+  feedbackDueDate DateTime?
+  priority        ProofPriority @default(NORMAL)
+  status          ProofStatus   @default(REQUESTED)
+  
+  createdById     String
+  createdBy       User          @relation("ProofRequestCreator", fields: [createdById], references: [id])
+  approvedAt      DateTime?
+  approvedByName  String?
+  productionArtworkUrl String?
+  
+  assets          ProofAsset[]
+  comments        ProofComment[]
+  portalAccess    ProofPortalAccess[]
+  vendorPortalAccess VendorPortalAccess[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([status])
+}
+
+model ProofAsset {
+  id              String          @id @default(cuid())
+  proofRequestId  String
+  proofRequest    ProofRequest    @relation(fields: [proofRequestId], references: [id], onDelete: Cascade)
+  
+  version         Int
+  fileName        String
+  objectPath      String?
+  googleDriveUrl  String?
+  fileSize        Int?
+  mimeType        String?
+  uploadedById    String?
+  uploadedByName  String
+  uploadedByRole  ParticipantRole
+  notes           String?
+  isCurrentVersion Boolean        @default(true)
+  
+  createdAt       DateTime        @default(now())
+
+  @@index([proofRequestId])
+  @@index([proofRequestId, version])
+}
+
+model ProofComment {
+  id              String          @id @default(cuid())
+  proofRequestId  String
+  proofRequest    ProofRequest    @relation(fields: [proofRequestId], references: [id], onDelete: Cascade)
+  proofAssetId    String?
+  
+  authorId        String?
+  authorName      String
+  authorRole      ParticipantRole
+  content         String
+  isInternal      Boolean         @default(false)
+  
+  createdAt       DateTime        @default(now())
+
+  @@index([proofRequestId])
+}
+
+model ProofPortalAccess {
+  id              String        @id @default(cuid())
+  proofRequestId  String
+  proofRequest    ProofRequest  @relation(fields: [proofRequestId], references: [id], onDelete: Cascade)
+  
+  accessToken     String        @unique
+  expiresAt       DateTime
+  lastAccess      DateTime?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([proofRequestId])
+  @@index([accessToken])
+}
+
+model VendorPortalAccess {
+  id              String        @id @default(cuid())
+  proofRequestId  String
+  proofRequest    ProofRequest  @relation(fields: [proofRequestId], references: [id], onDelete: Cascade)
+  
+  vendorName      String
+  vendorEmail     String
+  accessToken     String        @unique
+  expiresAt       DateTime
+  lastAccess      DateTime?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([proofRequestId])
+  @@index([accessToken])
+}
+
+// ============================================
+// AI MEETING STRATEGIST
+// ============================================
+
+enum MeetingNotesCompleteness {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum MeetingTaskPriority {
+  P0
+  P1
+  P2
+}
+
+enum MeetingTaskCategory {
+  STRATEGY
+  CREATIVE
+  OPS
+  TECH
+  MEASUREMENT
+  CLIENT
+}
+
+model Meeting {
+  id                 String                   @id @default(cuid())
+  organizationId     String
+  organization       Organization             @relation(fields: [organizationId], references: [id])
+  clientId           String?
+  client             Client?                  @relation(fields: [clientId], references: [id])
+  projectId          String?
+  project            Project?                 @relation(fields: [projectId], references: [id])
+  
+  calendarEventId    String?
+  title              String
+  datetime           DateTime
+  attendees          String[]
+  meetingLink        String?
+  
+  hasGeminiNotes     Boolean                  @default(false)
+  rawNotes           String?
+  notesCompleteness  MeetingNotesCompleteness?
+  
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  versions           MeetingAnalysis[]
+  extractedTasks     MeetingExtractedTask[]
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([calendarEventId])
+}
+
+model MeetingAnalysis {
+  id                 String   @id @default(cuid())
+  meetingId          String
+  meeting            Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  
+  versionNumber      Int
+  executiveBrief     String?
+  rankedMoves        Json?
+  risksGapsContra    Json?
+  creativeIdeas      Json?
+  followUpDraft      String?
+  followUpSubject    String?
+  nextMeetingAgenda  String?
+  
+  createdAt          DateTime @default(now())
+
+  @@unique([meetingId, versionNumber])
+  @@index([meetingId])
+}
+
+model MeetingExtractedTask {
+  id              String               @id @default(cuid())
+  meetingId       String
+  meeting         Meeting              @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  analysisVersion Int
+  
+  title           String
+  description     String?
+  evidence        String?
+  suggestedOwner  String?
+  matchedPersonId String?
+  matchedPerson   Person?              @relation(fields: [matchedPersonId], references: [id])
+  suggestedDue    String?
+  priority        MeetingTaskPriority  @default(P1)
+  category        MeetingTaskCategory  @default(OPS)
+  
+  createdTaskId   String?
+  createdTask     Task?                @relation(fields: [createdTaskId], references: [id])
+  
+  createdAt       DateTime             @default(now())
+
+  @@index([meetingId])
+  @@index([createdTaskId])
+  @@index([matchedPersonId])
+}
+
+model RunOfShow {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  spaces      RunOfShowSpace[]
+
+  @@index([projectId])
+}
+
+model RunOfShowSpace {
+  id           String     @id @default(cuid())
+  runOfShowId  String
+  runOfShow    RunOfShow  @relation(fields: [runOfShowId], references: [id], onDelete: Cascade)
+  rowOrder     Int
+  function     String?
+  capacity     String?
+  venueSpace   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  cells        RunOfShowCell[]
+
+  @@index([runOfShowId, rowOrder])
+}
+
+model RunOfShowCell {
+  id        String           @id @default(cuid())
+  spaceId   String
+  space     RunOfShowSpace   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  date      DateTime
+  content   String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([spaceId, date])
+  @@index([spaceId])
+}
+
+enum LaborType {
+  BILLABLE
+  BUSINESS_DEV
+  OPS_ADMIN
+  SYSTEMS_IP
+}
+
+model TimeEntry {
+  id          String     @id @default(cuid())
+  personId    String
+  person      Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+  weekStart   DateTime
+  laborType   LaborType
+  monday      Float      @default(0)
+  tuesday     Float      @default(0)
+  wednesday   Float      @default(0)
+  thursday    Float      @default(0)
+  friday      Float      @default(0)
+  submittedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([personId, weekStart, laborType])
+  @@index([personId])
+  @@index([weekStart])
+}
+
+model AiQueryLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  question     String
+  mode         String
+  toolsCalled  Json?
+  responseTime Int?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+// ============================================
+// PROACTIVE ALERTS SYSTEM
+// ============================================
+
+enum AlertRuleType {
+  MARGIN_BELOW_TARGET
+  MARGIN_DROP_24H
+  UNMATCHED_ACTUALS
+  UNMATCHED_FORECAST
+  LINE_FORECAST_OVER_BUDGET
+  SECTION_FORECAST_OVER_BUDGET
+  STAFFING_OVER_CAP_NEXT_WEEK
+  ONSITE_UNDERSTAFFED
+  PURCHASE_APPROVAL_AT_RISK
+  CRITICAL_TASK_DUE_SOON
+}
+
+enum AlertSeverity {
+  INFO
+  WARN
+  CRITICAL
+}
+
+model AlertEvent {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ruleType       AlertRuleType
+  severity       AlertSeverity
+  title          String
+  body           String
+  data           Json?
+  dedupeKey      String
+  cooldownUntil  DateTime?
+  createdAt      DateTime       @default(now())
+  resolvedAt     DateTime?
+  lastFiredAt    DateTime       @default(now())
+
+  recipients     AlertRecipient[]
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([resolvedAt])
+  @@index([ruleType])
+}
+
+model AlertRecipient {
+  id           String      @id @default(cuid())
+  alertEventId String
+  alertEvent   AlertEvent  @relation(fields: [alertEventId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt       DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@unique([alertEventId, userId])
+  @@index([userId])
+  @@index([readAt])
+}
+
+model AlertRuleConfig {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  isEnabled      Boolean      @default(true)
+  config         Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model BudgetSnapshotDaily {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date           DateTime @db.Date
+  revenue        Float
+  cogsForecast   Float
+  cogsActual     Float
+  forecastMargin Float
+  actualMargin   Float
+  createdAt      DateTime @default(now())
+
+  @@unique([projectId, date])
+  @@index([projectId])
+  @@index([date])
+}
+
+// ============================================
+// VENUE SEARCH - HOTEL/VENUE COMPARISON
+// ============================================
+
+model VenueSearch {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String   @default("Venue Search")
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entries VenueSearchEntry[]
+
+  @@index([projectId])
+}
+
+model VenueSearchEntry {
+  id              String       @id @default(cuid())
+  venueSearchId   String
+  venueSearch     VenueSearch  @relation(fields: [venueSearchId], references: [id], onDelete: Cascade)
+  vendorId        String?
+  vendor          Vendor?      @relation(fields: [vendorId], references: [id])
+  
+  // Basic Info
+  brand           String?
+  state           String?
+  city            String?
+  hotelName       String?
+  starRating      String?
+  comment         String?
+  
+  // Availability (5 date columns)
+  date1Available  String?
+  date2Available  String?
+  date3Available  String?
+  date4Available  String?
+  date5Available  String?
+  
+  // Contact Info
+  contactName     String?
+  contactTitle    String?
+  contactPhone    String?
+  contactEmail    String?
+  
+  // Property Details
+  totalSleepingRooms   String?
+  lastRenovated        String?
+  rate                 String?
+  resortFee            String?
+  housekeepingCharge   String?
+  inRoomWifi           String?
+  
+  // Contract Terms
+  attrition       String?
+  earnedComps     String?
+  unionStatus     String?
+  fbMinimum       String?
+  
+  // Financials
+  functionSpaceRental    String?
+  cateringMenuDiscount   String?
+  rebate                 String?
+  exclusiveVendors       String?
+  avDiscount             String?
+  parkingFees            String?
+  siteVisitNights        String?
+  
+  // Venue Info
+  distanceFromAirport    String?
+  biggestFunctionRoom    String?
+  floorPlanLink          String?
+  capacityChartLink      String?
+  
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([venueSearchId])
+  @@index([vendorId])
+}
+
+model DocFolder {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name           String
+  createdById    String?
+  createdBy      User?    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  files DocFile[]
+
+  @@index([projectId])
+}
+
+model DocFile {
+  id             String     @id @default(cuid())
+  projectId      String
+  project        Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folderId       String?
+  folder         DocFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  name           String
+  size           Int        @default(0)
+  contentType    String     @default("application/octet-stream")
+  storagePath    String
+  uploadedById   String?
+  uploadedBy     User?      @relation(fields: [uploadedById], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  comments DocComment[]
+
+  @@index([projectId])
+  @@index([folderId])
+}
+
+model DocComment {
+  id          String   @id @default(cuid())
+  fileId      String
+  file        DocFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  authorId    String?
+  author      User?    @relation(fields: [authorId], references: [id])
+  authorName  String
+  content     String
+  createdAt   DateTime @default(now())
+
+  @@index([fileId])
+}
+
+model ProjectCanvas {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  canvasType   String   @default("internal")
+  content      Json     @default("[]")
+  lastEditedBy String?
+  lastEditedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([projectId, canvasType])
+  @@index([projectId])
+}
+
+// ============================================
+// HOUSING - ROOMING LISTS
+// ============================================
+
+model RoomingList {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  dates       Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guests      RoomingListGuest[]
+
+  @@index([projectId])
+}
+
+model RoomingListGuest {
+  id              String      @id @default(cuid())
+  roomingListId   String
+  roomingList     RoomingList @relation(fields: [roomingListId], references: [id], onDelete: Cascade)
+  firstName       String      @default("")
+  lastName        String      @default("")
+  email           String      @default("")
+  wwid            String      @default("")
+  company         String      @default("")
+  role            String      @default("")
+  hotelId         String?
+  rate            String      @default("")
+  nights          Json        @default("{}")
+  sortOrder       Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([roomingListId])
+}
+
+model HousingHotel {
+  id                    String   @id @default(cuid())
+  projectId             String
+  project               Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name                  String
+  notes                 String   @default("")
+  dates                 Json     @default("[]")
+  contractedAttrition   Float?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  roomTypes   HousingRoomType[]
+  taxFees     HousingTaxFee[]
+
+  @@index([projectId])
+}
+
+model HousingRoomType {
+  id              String        @id @default(cuid())
+  hotelId         String
+  hotel           HousingHotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name            String
+  minNightStay    Int           @default(1)
+  description     String        @default("")
+  inventory       Json          @default("{}")
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([hotelId])
+}
+
+model CateringSettings {
+  id                String   @id @default(cuid())
+  projectId         String   @unique
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  vendorName        String   @default("")
+  menuLink          String   @default("")
+  minimumSpend      Float    @default(0)
+  serviceChargePct  Float    @default(0)
+  taxPct            Float    @default(0)
+  dietaryNotes      String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model CateringCategory {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items       CateringItem[]
+
+  @@index([projectId])
+}
+
+model CateringItem {
+  id              String           @id @default(cuid())
+  categoryId      String
+  category        CateringCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  beoNumber       String           @default("")
+  date            String           @default("")
+  functionName    String           @default("")
+  startTime       String           @default("")
+  endTime         String           @default("")
+  room            String           @default("")
+  menuDescription String           @default("")
+  pax             Int              @default(0)
+  retailPrice     Float            @default(0)
+  discountedPrice Float?
+  banquetCheck    Float?
+  notes           String           @default("")
+  sortOrder       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([categoryId])
+}
+
+model HousingTaxFee {
+  id          String        @id @default(cuid())
+  hotelId     String
+  hotel       HousingHotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name        String
+  type        String        @default("PERCENTAGE")
+  value       Float         @default(0)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([hotelId])
+}
+
+model CronState {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model MenuTemplate {
+  id               String   @id @default(cuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name             String
+  sourceFileName   String?
+  serviceChargePct Float    @default(0)
+  taxPct           Float    @default(0)
+  minimumGuests    Int?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  categories       MenuTemplateCategory[]
+
+  @@index([projectId])
+}
+
+model MenuTemplateCategory {
+  id         String   @id @default(cuid())
+  templateId String
+  template   MenuTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name       String
+  sortOrder  Int      @default(0)
+
+  items      MenuTemplateItem[]
+
+  @@index([templateId])
+}
+
+model MenuTemplateItem {
+  id               String   @id @default(cuid())
+  categoryId       String
+  category         MenuTemplateCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  pricePerPerson   Float?
+  additionalFee    Float?
+  additionalFeeNote String?
+  notes            String?
+  sortOrder        Int      @default(0)
+
+  @@index([categoryId])
+}
